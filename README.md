@@ -13,6 +13,12 @@ This script automates the startup. Take a look at the script before you run it:
 
 We have develped an openshift container platform (ocp) version of this, which also works on openshift online. This origin setup works perfectly on ocp and online; one of the benefits of openshift is that you can develop on origin and move to ocp or online with no changes. For ocp/online use the persistent volume claim (pvc) templates to map to persistent volumes. Its outside the scope of this to tell you how to do all that. But you want your zookeeper and kafka data to persist between pod restarts?
 
+# Automated deployment?
+
+Openshift is based on kubernetes 1.6. Why use it? Well it has security unlike kubernetes, so you can restrict who can access what projects, it has security context constraints that tighten up security when pods are deployed, it has lots more features than kubernetes, eg deployment config image change triggers and image streams which work differently to kubernetes.
+
+Some things are still missing. Dependancies between applications. Eg we need to have zookeeper up and configured before starting kafka. Some form of config management; how do we configure all these applications above the template configurations and deploy them? I did not find the answer to these so I cobbled something together. Thus a bunch of scripts and kafka.env environment file that has all the settings for a configuration. If you have anything better, or have the answers to this, get in contact and let me know!
+
 # Zookeeper
 
 A 3 pod statefulset cluster is created for zookeeper. It uses zookeeper v3.5.x (and later) that supports dynamic configuration. 3.5 is currently in beta, but we expect a full stable release soon.
@@ -83,8 +89,13 @@ $ oc rsh zoo-3 bin/zkCli.sh -cmd ls /
 [admin, brokers, cluster, config, consumers, controller, controller_epoch, foo, isr_change_notification, kafka-manager, zookeeper]
 ```
 
+# Kafka
+
+Kafka is also implemented as a 3 node cluster setup. Since kafka stores its config on zookeeper, we need a robust zookeeper setup. Other than that, there isn't much to say about kafka other than it just works. Confluent have a nice book on kafka that is currently free for download. Take a look at that if you are new to kafka and want to learn more.
 
 # Testing kafka
+
+We want to test kafka works. We already created two topics (test1/test2; check kafka.env). So we spin up a consumer and a producer. If we enter messages in the producer, we should see them turn up at the consumer.
 
 Open two terminal windows. In one, run:
 ```
