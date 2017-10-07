@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: kafka-client
+  annotations:
+    openshift.io/display-name: "Kafka Test Client"
+    description: "Kafka Client"
+    iconClass: "icon-openjdk"
+    tags: "kafka,zookeeper"
+objects:
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    name: kafka-client
+  spec:
+    securityContext:
+#     specify a user, to ensure it does not get run as root.
+      runAsUser: ${RUID}
+    containers:
+    - name: kafka-client
+      image: ${IMAGE}
+      command:
+        - sh
+        - -c
+        - "exec tail -f /dev/null"
+      resources:
+        limits:
+          memory: "256Mi"
+parameters:
+- description: Kafka client container image
+  name: IMAGE
+  value: spicysomtam/kafka:latest
+# This needs to be in a different range on origin; eg 1000060000
+- description: Container run user uid.
+  name: RUID
+  value: '1000110000'

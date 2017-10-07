@@ -1,0 +1,97 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: kafka-manager
+  annotations:
+    openshift.io/display-name: "Kafka Manager"
+    description: "Kafka Manager"
+    iconClass: "icon-openjdk"
+    tags: "kafka,zookeeper"
+objects:
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: kafka-manager
+  spec:
+    selector:
+      app: kafka-manager
+    ports:
+    - name: 9000-tcp
+      port: 9000
+      targetPort: 9000
+- apiVersion: v1
+  kind: DeploymentConfig
+  metadata:
+    name: kafka-manager
+  spec:
+    replicas: ${REPLICAS}
+    triggers:
+      - type: "ConfigChange"
+      - type: "ImageChange"
+        imageChangeParams:
+          automatic: true
+          containerNames:
+          - kafka-manager
+          from:
+            kind: ImageStreamTag
+            name: ${IMAGESTREAM}:${TAG}
+    template:
+      metadata:
+        labels:
+          app: kafka-manager
+      spec:
+        securityContext:
+#         specify a user, to ensure it does not get run as root.
+          runAsUser: ${RUID}
+        containers:
+        - env:
+          - name: ZK_HOSTS
+            value: ${ZK_HOSTS}
+          image: ${IMAGE}:${TAG}
+          name: kafka-manager
+          ports:
+          - containerPort: 9000
+          readinessProbe:
+            tcpSocket:
+              port: 9000
+            initialDelaySeconds: 3
+            timeoutSeconds: 1
+          livenessProbe:
+            tcpSocket:
+              port: 9000
+            initialDelaySeconds: 1
+            timeoutSeconds: 1
+- apiVersion: v1
+  kind: Route
+  metadata:
+    name: kafka-manager
+  spec:
+    host: ${HOSTNAME}
+    to:
+      kind: Service
+      name: kafka-manager
+parameters:
+- description: Zookeeper host/s
+  name: ZK_HOSTS
+  value: zookeeper:2181
+- description: Kafka manager container image
+  name: IMAGE
+  value: spicysomtam/kafka-manager
+- description: Openshift imagestream to watch for image changes
+  name: IMAGESTREAM
+  value: kafka-manager
+- description: Kafka manager route hostname
+  name: HOSTNAME
+  value: km.local
+- description: Kafka manager number of pods/replicas
+  name: REPLICAS
+  value: '1'
+# This needs to be in a different range on origin; eg 1000060000
+- description: Container run user uid.
+  name: RUID
+  value: '1000110000'
+- description: Image and imagestream tags
+  name: TAG
+  value: latest
+labels:
+  template: kafka-manager

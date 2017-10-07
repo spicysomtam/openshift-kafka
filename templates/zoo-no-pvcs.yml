@@ -1,0 +1,122 @@
+# No pvc's; useful for testing
+apiVersion: v1
+kind: Template
+metadata:
+  name: zookeeper-no-pvcs
+  annotations:
+    openshift.io/display-name: "Zookeeper Container Cluster"
+    description: "Zookeeper"
+    iconClass: "icon-openjdk"
+    tags: "kafka,zookeeper"
+objects:
+# dns for zookeeper peering and leader election; note clusterIP: None
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+    name: zk
+    labels:
+      app: zk
+  spec:
+    ports:
+    - port: 2888
+      name: peer
+    - port: 3888
+      name: leader-election
+    # *.zk.default.svc.cluster.local
+    clusterIP: None
+    selector:
+      app: zk
+# The real service
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: zookeeper
+  spec:
+    ports:
+    - port: 2181
+      name: client
+    selector:
+      app: zk
+- apiVersion: apps/v1beta1 
+  kind: StatefulSet 
+  metadata:
+    name: zoo
+  spec:
+    serviceName: "zk"
+    replicas: ${REPLICAS}
+    template:
+      metadata:
+        labels:
+          app: zk
+        annotations:
+          pod.alpha.kubernetes.io/initialized: "true"
+          service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+      spec:
+        securityContext:
+#         specify a user, to ensure it does not get run as root.
+          runAsUser: ${RUID}
+        containers:
+        - name: zk
+          image: ${IMAGE}:${TAG}
+          ports:
+          - containerPort: 2181
+            name: client
+          - containerPort: 2888
+            name: peer
+          - containerPort: 3888
+            name: leader-election
+          command:
+          - sh
+          - -c
+          - "./zk-start.sh skipACL=yes"
+          env:
+          - name: ZOOKEEPER_LOG4J_ROOT_LOGLEVEL
+            value: ERROR
+          - name: ZOOKEEPER_TOOLS_LOG4J_LOGLEVEL
+            value: ERROR
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "grep -q dynamic. conf/zoo.cfg"
+            initialDelaySeconds: 15
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "bin/zkCli.sh ls /"
+            initialDelaySeconds: 80
+            timeoutSeconds: 5
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                - sh
+                - -c
+                - /bin/killall -s TERM java
+        volumes:
+        - name: opt
+          emptyDir: {}
+        - name: workdir
+          emptyDir: {}
+parameters:
+- description: Number of zookeeper pods (max 5; only 5 pvcs in the template)
+  name: REPLICAS
+  value: '3'
+- description: Zookeeper container image
+  name: IMAGE
+  value: spicysomtam/zookeeper
+# This needs to be in a different range on origin; eg 1000060000
+- description: Container run user uid.
+  name: RUID
+  value: '1000110000'
+- description: Image and imagestream tags
+  name: TAG
+  value: latest
+labels:
+  template: zookeeper-no-pvcs

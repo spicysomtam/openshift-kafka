@@ -1,0 +1,82 @@
+# Uses 512Mb; does not work with 256Mb so don't reduce memory size.
+apiVersion: v1
+kind: Template
+metadata:
+  name: kafka-no-pvcs
+  annotations:
+#    openshift.io/display-name: "Kafka Container Cluster"
+    description: "Kafka"
+    iconClass: "icon-openjdk"
+    tags: "kafka,zookeeper"
+objects:
+# A headless service to create DNS records
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+    name: broker
+  spec:
+    ports:
+    - port: 9092
+    # [podname].broker.myproject.svc.cluster.local
+    clusterIP: None
+    selector:
+      app: kafka
+# The real service
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: kafka
+  spec:
+    ports:
+    - port: 9092
+    selector:
+      app: kafka
+- apiVersion: apps/v1beta1
+  kind: StatefulSet
+  metadata:
+    name: kafka
+  spec:
+    serviceName: "broker"
+    replicas: ${REPLICAS}
+    template:
+      metadata:
+        labels:
+          app: kafka
+        annotations:
+          pod.alpha.kubernetes.io/initialized: "true"
+      spec:
+        securityContext:
+#         specify a user, to ensure it does not get run as root.
+          runAsUser: ${RUID}
+        containers:
+        - name: broker
+          image: ${IMAGE}:${TAG}
+          ports:
+          - containerPort: 9092
+          command:
+          - sh
+          - -c
+          - "./bin/kafka-server-start.sh config/server.properties --override broker.id=$(hostname | awk -F'-' '{print $2}') --override delete.topic.enable=true --override auto.create.topics.enable=false"
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                - ./bin/kafka-server-stop.sh
+parameters:
+- description: Number of kafka pods (max 5; only 5 pvcs in the template)
+  name: REPLICAS
+  value: '3'
+- description: Kafka container image
+  name: IMAGE
+  value: spicysomtam/kafka
+# This needs to be in a different range on origin; eg 1000060000
+- description: Container run user uid.
+  name: RUID
+  value: '1000110000'
+- description: Image and imagestream tags
+  name: TAG
+  value: latest
+labels:
+  template: kafka-no-pvcs
