@@ -45,6 +45,14 @@ do
   c=$(($c+1))
 done
 
+# Lets add zookeepers that are already defined. Prevents zoo-0 not being able to join zoo-1, etc.
+# We use ping since dig/nslookup is not installed.
+while [[ ! $(ping -c 1 -w 2 zoo-$c.$dmn 2>&1) =~ unknown\ host ]]
+do
+  echo "server.$(($c+1))=$(echo $hname|cut -d- -f1)-$c.$dmn:2888:3888:participant;2181" >> $dyn
+  c=$(($c+1))
+done
+
 # Update the config file by putting settings on the command line
 while [ "$1" != "" ]; do
   echo "Making this config change: $1"
@@ -61,5 +69,13 @@ while [ "$1" != "" ]; do
 
   shift
 done
+
+echo "Zookeeper config installed ($cfg):"
+cat $cfg
+echo ""
+
+echo "Zookeeper dynamic startup config installed ($dyn):"
+cat $dyn
+echo ""
 
 exec bin/zkServer.sh start-foreground
